@@ -137,13 +137,48 @@ metadata, not as an active Depot role candidate.
 
 The shipped OpenRouter benchmark content changed, so its source version is
 `1.22.0`. The model-router policy and human guidance also changed, so its source
-version is `0.10.0`. Codex manifests were regenerated. No consumer repository or
-installed plugin cache changed. Required release tags are `openrouter-v1.22.0`
-and `model-router-v0.10.0`. After release, refresh the Claude and Codex Depot
-marketplace/plugin caches using the repository cache-sync procedure, verify
-those installed versions, and run the installed benchmark and role-router
-fixtures. Those installed
-consumer checks remain outstanding; source tests do not prove cache freshness.
+version is `0.10.0`. Codex manifests were regenerated. The merged source is
+`88f83071ed3604b93fa4b6ff43f9b1c98df32664` (PR #150). Release preflight passed
+against that commit after both harnesses were refreshed. Tags
+`dm-review-v1.84.0`, `pipeline-v1.70.0`, `model-router-v0.10.0`,
+`workflow-kernel-v0.24.1`, and `openrouter-v1.22.0` now point to it. Claude and
+Codex marketplace snapshots were fast-forwarded; Model Router 0.10.0 and
+OpenRouter 1.22.0 are installed in both caches. The preflight checked all 16
+installed Codex plugins against the canonical marketplace. Claude Code reports
+the two new plugin versions and requests a restart to apply them. No consumer
+repository was changed. Running the installed benchmark and role-router
+fixtures remains outstanding; source tests and cache version checks do not
+prove installed consumer behavior.
+
+## Operator steering received after merge: Claude 5.5 candidates
+
+The operator identified Claude Sonnet 5.5 and Opus 5.5 as additional native
+subscription candidates and asked to keep use lean on the current $20/month
+Claude plan. This expands the proposal only; the bounded evaluation above made
+no Claude calls, so none of its results establish a Claude comparison or justify
+changing a production role policy. Anthropic says Sonnet 5.5 is its faster,
+lower-cost everyday model with strengths in design and polished documents, and
+Opus 5.5 is aimed at complex coding, knowledge work, and judgment. These are
+vendor descriptions, not Depot results. See Anthropic's [Sonnet 5.5 release and
+pricing](https://www.anthropic.com/claude-sonnet-5-5), [Opus 5.5 availability
+and pricing](https://www.anthropic.com/claude-opus-5-5), and [Pro plan
+details](https://support.anthropic.com/en/articles/8325610-how-much-does-claude-pro-cost).
+
+| Situation | Candidate | Rail / effort | Budget and evidence boundary |
+|---|---|---|---|
+| Light planning, research synthesis, and design-aware document or interface critique | `claude-sonnet-5-5` / medium | Claude native subscription | Use selectively when the task benefits from its design/document strengths or Claude context is already active. Preserve Luna for routine high-volume work. No per-call subscription cost or remaining allowance is available from these sources. |
+| Design-sensitive unresolved architecture or high-stakes creative judgment | `claude-opus-5-5` / medium | Claude native subscription | Reserve for cases where stronger design judgment may avoid costly review or rework. Pro access is documented, but actual Claude Code account access and current native model-picker identity must be confirmed in the operator's session before routing. |
+| General substantive coordination, bounded review, and implementation | Keep the proposed GPT-6.1 Sol / medium or Luna / high map above | Codex native subscription | This Codex-only task provides no evidence to replace these choices with Claude. Run small, matched subscription-backed trials before changing role policy. |
+| Difficult debugging and unresolved architecture outside design-led tasks | Keep Astra / high as the escalation option; compare GPT-6.1 Sol / high and Opus 5.5 / medium selectively | Codex or Claude native subscription, respectively | Retain Astra until Depot-specific completion quality, retry/review cost, latency, and account-capacity evidence supports another escalation path. |
+
+The Anthropic API prices on the release pages are not estimates of Pro-plan
+usage depletion. Subscription capacity is shared with Claude chat and varies by
+task; no API-equivalent dollars should be assigned to these proposed calls.
+The next useful evidence is a small, matched design-oriented pilot comparing
+Sonnet 5.5, Opus 5.5, GPT-6.1 Sol, and Astra on the same artifact tasks, with
+actual native identity, effort, fallback, elapsed time, repair/review cost, and
+qualitative maintainer assessment recorded. Keep it separate from the completed
+Codex benchmark and cap it to protect the current subscription budget.
 
 The production canary was not attempted. It requires successful comparable
 screening first, followed by one read-only coordinator comparison on the same
