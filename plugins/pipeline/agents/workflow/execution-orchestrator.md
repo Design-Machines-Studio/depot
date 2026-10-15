@@ -606,7 +606,7 @@ joins use selected-lane order). Final review shares this private directory/index
 suppresses its report and never consumes origin for eligibility.
 
 Before design builder dispatch, follow model-router's `design-consultation.md`;
-inline `claude-design` instructions and source in `WORKER_PROMPT`, including replacements.
+include excerpts or its fallback in `WORKER_PROMPT`, including replacements.
 
 **Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, fresh output
 and private receipt paths in the run-private router registry. Build

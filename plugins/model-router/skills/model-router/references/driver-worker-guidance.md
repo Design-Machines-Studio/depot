@@ -12,9 +12,10 @@ completion efficiency. Do not require a predictable cheap-model failure first.
 Speed matters when it reduces total delivery cost; no model name guarantees it.
 Concrete identities here are operator-only; `role-policy.json` owns selection.
 
-Every design-related task uses `claude-design` for judgment and execution under
-the [shared design-skill contract](design-consultation.md#required-design-skill).
-Include its relevant instructions in bounded design-worker packets.
+Use `claude-design` when available under the
+[shared design contract](design-consultation.md#optional-design-skill).
+Otherwise continue the required design consultation with the participant's own
+judgment and supplied evidence; missing skill text alone never blocks it.
 
 | Work | Starting point | Escalation |
 |---|---|---|

@@ -317,7 +317,7 @@
     "live-wires": ">=1.8.0",
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
-    "model-router": ">=0.14.0",
+    "model-router": ">=0.14.1",
     "workflow-kernel": ">=0.30.3"
   },
   "optionalPluginDependencies": {
